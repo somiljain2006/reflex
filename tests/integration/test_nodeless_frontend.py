@@ -51,6 +51,7 @@ def nodeless_app(tmp_path_factory) -> Generator[AppHarness, None, None]:
         The running AppHarness.
     """
     with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.delenv("REFLEX_USE_NPM", raising=False)
         monkeypatch.setenv("PATH", _path_without_node())
 
         is_dedicated_ci = os.environ.get("REQUIRE_BUN_NODELESS_TEST") == "true"
