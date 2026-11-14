@@ -389,7 +389,7 @@ jobs:
           REQUIRE_BUN_NODELESS_TEST: "true"
         run: |
           uv run pytest tests/integration/test_nodeless_frontend.py -rs -v --junitxml=test-results.xml
-          python -c "import xml.etree.ElementTree as ET; root = ET.parse('test-results.xml').getroot(); skipped = root.findall('.//testcase/skipped'); assert not skipped, f'{len(skipped)} test(s) were skipped'"
+          uv run python -c "import xml.etree.ElementTree as ET; root = ET.parse('test-results.xml').getroot(); skipped = root.findall('.//testcase/skipped'); assert not skipped, f'{len(skipped)} test(s) were skipped'"
 
   # The one status check the branch rules require from this workflow. Naming the
   # jobs above directly does not survive: check names follow the matrix and the

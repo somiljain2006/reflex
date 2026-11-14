@@ -3,6 +3,7 @@
 import os
 import shutil
 from collections.abc import Generator
+from html.parser import HTMLParser
 
 import httpx
 import pytest
@@ -114,7 +115,10 @@ def test_nodeless_frontend_serves(nodeless_app: AppHarness):
     assert nodeless_app.frontend_url is not None
     response = httpx.get(nodeless_app.frontend_url, timeout=60)
     assert response.status_code == 200
-    assert "__reactRouterContext" in response.text
+    parser = VisibleTextParser()
+    parser.feed(response.text)
+    assert parser.get_visible_text() == ""
+    assert response.text.count("window.__reactRouterContext = ") == 1
 
 
 @pytest.fixture
@@ -155,6 +159,7 @@ def outdated_node_app(tmp_path_factory) -> Generator[AppHarness, None, None]:
         pytest.skip(f"Requires outdated Node, found supported version {node_version}")
 
     with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.delenv("REFLEX_USE_NPM", raising=False)
         monkeypatch.setattr(reflex_testing, "_with_development_condition", dict)
 
         harness = AppHarness.create(
@@ -182,6 +187,41 @@ def test_outdated_node_frontend_serves(outdated_node_app: AppHarness):
     assert outdated_node_app.frontend_url is not None
     response = httpx.get(outdated_node_app.frontend_url, timeout=60)
     assert response.status_code == 200
-    # The page is hydrated client-side, so assert on the react-router document
-    # the dev server rendered rather than on the app's own text.
-    assert "__reactRouterContext" in response.text
+    parser = VisibleTextParser()
+    parser.feed(response.text)
+    assert parser.get_visible_text() == ""
+    assert response.text.count("window.__reactRouterContext = ") == 1
+
+
+class VisibleTextParser(HTMLParser):
+    """Extract visible text from the HTML body."""
+
+    def __init__(self):
+        """Initialize the parser state."""
+        super().__init__()
+        self.in_body = False
+        self.ignored_depth = 0
+        self.text = []
+
+    def handle_starttag(self, tag, attrs):
+        """Track body and ignored-element boundaries."""
+        if tag == "body":
+            self.in_body = True
+        elif self.in_body and tag in {"script", "style"}:
+            self.ignored_depth += 1
+
+    def handle_endtag(self, tag):
+        """Track the end of body and ignored elements."""
+        if tag == "body":
+            self.in_body = False
+        elif self.in_body and tag in {"script", "style"} and self.ignored_depth:
+            self.ignored_depth -= 1
+
+    def handle_data(self, data):
+        """Collect visible body text."""
+        if self.in_body and not self.ignored_depth:
+            self.text.append(data)
+
+    def get_visible_text(self):
+        """Return normalized visible body text."""
+        return " ".join(" ".join(self.text).split())
